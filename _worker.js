@@ -1,72 +1,74 @@
 import { connect } from "cloudflare:sockets";
 
-// 配置区块
-let 订阅路径 = "订阅路径";
-let 伪装网页;
-let 验证UUID;
-let 优选链接 = "https://raw.githubusercontent.com/ImLTHQ/edgetunnel/main/output.txt";
-let 优选列表 = [];
-let NAT64前缀 = "2a02:898:146:64::";
-let DOH地址 = "1.1.1.1";
-let 反代IP = "proxyip.cmliussss.net";
+// Configuration Block
+let subscriptionPath = "subscription-path";
+let camouflageWebpage;
+let validateUUID;
+let preferredLink = "https://raw.githubusercontent.com/ImLTHQ/edgetunnel/main/output.txt";
+let preferredList = [];
+let nat64Prefix = "2a02:898:146:64::";
+let dohAddress = "1.1.1.1";
+let proxyIP = "proxyip.cmliussss.net";
+let customSNI = ""; // [NEW] Custom SNI feature
 
-// 关键词拆分(防检测)
-const 威图锐拆分 = ["v2", "ray"];
-const 科拉什拆分 = ["cla", "sh"];
-const 维列斯拆分 = ["vl", "ess"];
+// Keyword splitting (anti-detection)
+const v2raySplit = ["v2", "ray"];
+const clashSplit = ["cla", "sh"];
+const vlessSplit = ["vl", "ess"];
 
-const 威图锐 = 威图锐拆分.join("");
-const 科拉什 = 科拉什拆分.join("");
-const 维列斯 = 维列斯拆分.join("");
+const v2ray = v2raySplit.join("");
+const clash = clashSplit.join("");
+const vless = vlessSplit.join("");
 
-// 网页入口
+// Web Entry Point
 export default {
-  async fetch(访问请求, env) {
-    订阅路径 = env.SUB_PATH ?? 订阅路径;
-    验证UUID = 生成UUID();
-    优选链接 = env.TXT_URL ?? 优选链接;
-    NAT64前缀 = env.NAT64 ?? NAT64前缀;
-    DOH地址 = env.DOH ?? DOH地址;
-    反代IP = env.PROXY_IP ?? 反代IP;
-    伪装网页 = env.FAKE_WEB;
+  async fetch(request, env) {
+    subscriptionPath = env.SUB_PATH ?? subscriptionPath;
+    validateUUID = generateUUID();
+    preferredLink = env.TXT_URL ?? preferredLink;
+    nat64Prefix = env.NAT64 ?? nat64Prefix;
+    dohAddress = env.DOH ?? dohAddress;
+    proxyIP = env.PROXY_IP ?? proxyIP;
+    camouflageWebpage = env.FAKE_WEB;
+    customSNI = env.CUSTOM_SNI ?? ""; // [NEW] Load custom SNI from env var
 
-    const url = new URL(访问请求.url);
-    const 读取我的请求标头 = 访问请求.headers.get("Upgrade");
-    const WS请求 = 读取我的请求标头 == "websocket";
+    const url = new URL(request.url);
+    const upgradeHeader = request.headers.get("Upgrade");
+    const isWSRequest = upgradeHeader == "websocket";
 
-    const 路径配置 = {
-      威图锐: `/${encodeURIComponent(订阅路径)}/${威图锐}`,
-      科拉什: `/${encodeURIComponent(订阅路径)}/${科拉什}`,
-      订阅聚合: `/${encodeURIComponent(订阅路径)}/info`,
-      通用订阅: `/${encodeURIComponent(订阅路径)}`,
+    const pathConfig = {
+      v2ray: `/${encodeURIComponent(subscriptionPath)}/${v2ray}`,
+      clash: `/${encodeURIComponent(subscriptionPath)}/${clash}`,
+      subscriptionInfo: `/${encodeURIComponent(subscriptionPath)}/info`,
+      universalSubscription: `/${encodeURIComponent(subscriptionPath)}`,
     };
 
-    const 是正确路径 = url.pathname === 路径配置.威图锐 ||
-                      url.pathname === 路径配置.科拉什 ||
-                      url.pathname === 路径配置.订阅聚合 ||
-                      url.pathname === `/${encodeURIComponent(订阅路径)}`
+    const isValidPath = url.pathname === pathConfig.v2ray ||
+                      url.pathname === pathConfig.clash ||
+                      url.pathname === pathConfig.subscriptionInfo ||
+                      url.pathname === `/${encodeURIComponent(subscriptionPath)}`;
 
-    if (!WS请求 && !是正确路径) {
-      if (伪装网页) {
+    if (!isWSRequest && !isValidPath) {
+      if (camouflageWebpage) {
         try {
-          const targetBase = 伪装网页.startsWith('http://') || 伪装网页.startsWith('https://')
-            ? 伪装网页
-            : `https://${伪装网页}`;
+          const targetBase = camouflageWebpage.startsWith('http://') || camouflageWebpage.startsWith('https://')
+            ? camouflageWebpage
+            : `https://${camouflageWebpage}`;
 
           const targetUrl = new URL(targetBase);
           targetUrl.pathname = url.pathname;
           targetUrl.search = url.search;
 
-          const 请求对象 = new Request(targetUrl.toString(), {
-            method: 访问请求.method,
-            headers: 访问请求.headers,
-            body: 访问请求.body,
+          const requestObj = new Request(targetUrl.toString(), {
+            method: request.method,
+            headers: request.headers,
+            body: request.body,
           });
 
-          const 响应对象 = await fetch(请求对象);
-          return 响应对象;
+          const responseObj = await fetch(requestObj);
+          return responseObj;
         } catch {
-          console.error(`[伪装网页请求失败] 目标: ${伪装网页}`);
+          console.error(`[Camouflage webpage request failed] Target: ${camouflageWebpage}`);
           return new Response(null, { status: 404 });
         }
       } else {
@@ -74,248 +76,247 @@ export default {
       }
     }
 
-    if (!WS请求) {
-      if (是正确路径) {
-        优选列表 = await 获取优选列表();
+    if (!isWSRequest) {
+      if (isValidPath) {
+        preferredList = await fetchPreferredList();
       }
 
-      if (url.pathname === 路径配置.威图锐) {
-        return 威图锐配置文件(访问请求.headers.get("Host"));
+      if (url.pathname === pathConfig.v2ray) {
+        return generateV2rayConfig(request.headers.get("Host"));
       }
-      else if (url.pathname === 路径配置.科拉什) {
-        return 科拉什配置文件(访问请求.headers.get("Host"));
+      else if (url.pathname === pathConfig.clash) {
+        return generateClashConfig(request.headers.get("Host"));
       }
-      else if (url.pathname === 路径配置.订阅聚合) {
-        return 聚合信息(访问请求.headers.get("Host"));
+      else if (url.pathname === pathConfig.subscriptionInfo) {
+        return generateAggregatedInfo(request.headers.get("Host"));
       }
-      else if (url.pathname === 路径配置.通用订阅) {
-        const 用户代理 = 访问请求.headers.get("User-Agent").toLowerCase();
-        const 配置生成器 = {
-          [威图锐]: 威图锐配置文件,
-          [科拉什]: 科拉什配置文件,
-          tips: 提示界面,
+      else if (url.pathname === pathConfig.universalSubscription) {
+        const userAgent = request.headers.get("User-Agent").toLowerCase();
+        const configGenerators = {
+          [v2ray]: generateV2rayConfig,
+          [clash]: generateClashConfig,
+          tips: generateTipsPage,
         };
-        const 工具 = Object.keys(配置生成器).find((工具) => 用户代理.includes(工具));
-        优选列表 = await 获取优选列表();
-        const 生成配置 = 配置生成器[工具 || "tips"];
-        return 生成配置(访问请求.headers.get("Host"));
+        const matchedTool = Object.keys(configGenerators).find((tool) => userAgent.includes(tool));
+        preferredList = await fetchPreferredList();
+        const generateConfig = configGenerators[matchedTool || "tips"];
+        return generateConfig(request.headers.get("Host"));
       }
     }
 
-    if (WS请求) {
-      return await 升级WS请求();
+    if (isWSRequest) {
+      return await upgradeToWS(request);
     }
   },
 };
 
-// 脚本主要架构
-async function 升级WS请求() {
-  const 创建WS接口 = new WebSocketPair();
-  const [客户端, WS接口] = Object.values(创建WS接口);
-  WS接口.accept();
-  WS接口.send(new Uint8Array([0, 0]));
-  启动传输管道(WS接口);
-  return new Response(null, { status: 101, webSocket: 客户端 });
+// Main Script Architecture
+async function upgradeToWS(request) {
+  const wsPair = new WebSocketPair();
+  const [client, ws] = Object.values(wsPair);
+  ws.accept();
+  ws.send(new Uint8Array([0, 0]));
+  startTransmissionPipeline(ws, request);
+  return new Response(null, { status: 101, webSocket: client });
 }
 
-async function 启动传输管道(WS接口) {
-  let TCP接口,
-    首包数据 = false,
-    首包处理 = Promise.resolve(),
-    传输数据;
-  WS接口.addEventListener("message", async (event) => {
-    首包处理 = 首包处理.then(async () => {
-      if (!首包数据) {
-        首包数据 = true;
-        await 解析VL标头(event.data);
+async function startTransmissionPipeline(ws, request) {
+  let tcpSocket,
+    isFirstPacket = false,
+    firstPacketPromise = Promise.resolve(),
+    writer;
+    
+  ws.addEventListener("message", async (event) => {
+    firstPacketPromise = firstPacketPromise.then(async () => {
+      if (!isFirstPacket) {
+        isFirstPacket = true;
+        await parseVLESSHeader(event.data, request);
       } else {
-        await 传输数据.write(event.data);
+        await writer.write(event.data);
       }
     });
   });
 
-  async function 解析VL标头(VL数据) {
-    if (验证VL的密钥(new Uint8Array(VL数据.slice(1, 17))) !== 验证UUID) {
+  async function parseVLESSHeader(vlessData, request) {
+    if (validateVLESSKey(new Uint8Array(vlessData.slice(1, 17))) !== validateUUID) {
       return new Response(null, { status: 400 });
     }
 
-    const 获取数据定位 = new Uint8Array(VL数据)[17];
-    const 提取端口索引 = 18 + 获取数据定位 + 1;
-    const 建立端口缓存 = VL数据.slice(提取端口索引, 提取端口索引 + 2);
-    const 访问端口 = new DataView(建立端口缓存).getUint16(0);
+    const optionLength = new Uint8Array(vlessData)[17];
+    const portIndex = 18 + optionLength + 1;
+    const portBuffer = vlessData.slice(portIndex, portIndex + 2);
+    const targetPort = new DataView(portBuffer).getUint16(0);
 
-    const 提取地址索引 = 提取端口索引 + 2;
-    const 建立地址缓存 = new Uint8Array(VL数据.slice(提取地址索引, 提取地址索引 + 1));
-    const 识别地址类型 = 建立地址缓存[0];
+    const addressIndex = portIndex + 2;
+    const addressTypeBuffer = new Uint8Array(vlessData.slice(addressIndex, addressIndex + 1));
+    const addressType = addressTypeBuffer[0];
 
-    let 地址长度 = 0;
-    let 访问地址 = "";
-    let 地址信息索引 = 提取地址索引 + 1;
+    let addressLength = 0;
+    let targetAddress = "";
+    let addressInfoIndex = addressIndex + 1;
 
-    switch (识别地址类型) {
-      case 1:
-        地址长度 = 4;
-        访问地址 = new Uint8Array(VL数据.slice(地址信息索引, 地址信息索引 + 地址长度)).join(".");
+    switch (addressType) {
+      case 1: // IPv4
+        addressLength = 4;
+        targetAddress = new Uint8Array(vlessData.slice(addressInfoIndex, addressInfoIndex + addressLength)).join(".");
         break;
-      case 2:
-        地址长度 = new Uint8Array(VL数据.slice(地址信息索引, 地址信息索引 + 1))[0];
-        地址信息索引 += 1;
-        访问地址 = new TextDecoder().decode(VL数据.slice(地址信息索引, 地址信息索引 + 地址长度));
+      case 2: // Domain
+        addressLength = new Uint8Array(vlessData.slice(addressInfoIndex, addressInfoIndex + 1))[0];
+        addressInfoIndex += 1;
+        targetAddress = new TextDecoder().decode(vlessData.slice(addressInfoIndex, addressInfoIndex + addressLength));
         break;
-      case 3:
-        地址长度 = 16;
-        const dataView = new DataView(VL数据.slice(地址信息索引, 地址信息索引 + 地址长度));
+      case 3: // IPv6
+        addressLength = 16;
+        const dataView = new DataView(vlessData.slice(addressInfoIndex, addressInfoIndex + addressLength));
         const ipv6 = [];
         for (let i = 0; i < 8; i++) {
           ipv6.push(dataView.getUint16(i * 2).toString(16));
         }
-        访问地址 = ipv6.join(":");
+        targetAddress = ipv6.join(":");
         break;
       default:
         return new Response(null, { status: 400 });
     }
 
-    const 写入初始数据 = VL数据.slice(地址信息索引 + 地址长度);
+    const initialData = vlessData.slice(addressInfoIndex + addressLength);
 
     try {
-      // 第一步：尝试直连
-      TCP接口 = await connect({ hostname: 访问地址, port: 访问端口, allowHalfOpen: true });
-      await TCP接口.opened;
+      // Step 1: Try direct connection
+      tcpSocket = await connect({ hostname: targetAddress, port: targetPort, allowHalfOpen: true });
+      await tcpSocket.opened;
     } catch {
-      // 直连失败，检查是否有NAT64前缀
-      if (NAT64前缀) {
+      // Direct connection failed, check for NAT64 prefix
+      if (nat64Prefix) {
         try {
-          // 第二步：尝试NAT64连接
-          const NAT64地址 = 识别地址类型 === 1
-            ? 转换IPv4到NAT64(访问地址)
-            : 转换IPv4到NAT64(await 解析域名到IPv4(访问地址));
-          TCP接口 = await connect({ hostname: NAT64地址, port: 访问端口 });
-          await TCP接口.opened;
+          // Step 2: Try NAT64 connection
+          const nat64Address = addressType === 1
+            ? convertIPv4ToNAT64(targetAddress)
+            : convertIPv4ToNAT64(await resolveDomainToIPv4(targetAddress));
+          tcpSocket = await connect({ hostname: nat64Address, port: targetPort });
+          await tcpSocket.opened;
         } catch {
-          // NAT64连接失败，使用反代
-          if (反代IP) {
+          // NAT64 failed, try proxy
+          if (proxyIP) {
             try {
-              let [反代IP地址, 反代IP端口] = 反代IP.split(":");
-              TCP接口 = await connect({
-                hostname: 反代IP地址,
-                port: 反代IP端口 || 443,
+              let [proxyIPAddr, proxyIPPort] = proxyIP.split(":");
+              tcpSocket = await connect({
+                hostname: proxyIPAddr,
+                port: proxyIPPort || 443,
               });
-              await TCP接口.opened;
+              await tcpSocket.opened;
             } catch {
-              console.error("连接均失败");
+              console.error("All connection attempts failed");
             }
           } else {
-            console.error("连接均失败");
+            console.error("All connection attempts failed");
           }
         }
       } else {
-        // 没有NAT64前缀，尝试反代连接
-        if (反代IP) {
+        // No NAT64 prefix, try proxy connection
+        if (proxyIP) {
           try {
-            let [反代IP地址, 反代IP端口] = 反代IP.split(":");
-            TCP接口 = await connect({
-              hostname: 反代IP地址,
-              port: 反代IP端口 || 443,
+            let [proxyIPAddr, proxyIPPort] = proxyIP.split(":");
+            tcpSocket = await connect({
+              hostname: proxyIPAddr,
+              port: proxyIPPort || 443,
             });
-            await TCP接口.opened;
+            await tcpSocket.opened;
           } catch {
-            console.error("连接均失败");
+            console.error("All connection attempts failed");
           }
         } else {
-          console.error("仅直连但失败");
+          console.error("Direct connection only but failed");
         }
       }
     }
 
-    建立传输管道(写入初始数据);
+    establishTransmissionPipeline(initialData);
   }
 
-  function 验证VL的密钥(arr, offset = 0) {
+  function validateVLESSKey(arr, offset = 0) {
     const uuid = (
-      转换密钥格式[arr[offset + 0]] +
-      转换密钥格式[arr[offset + 1]] +
-      转换密钥格式[arr[offset + 2]] +
-      转换密钥格式[arr[offset + 3]] +
+      hexFormat[arr[offset + 0]] +
+      hexFormat[arr[offset + 1]] +
+      hexFormat[arr[offset + 2]] +
+      hexFormat[arr[offset + 3]] +
       "-" +
-      转换密钥格式[arr[offset + 4]] +
-      转换密钥格式[arr[offset + 5]] +
+      hexFormat[arr[offset + 4]] +
+      hexFormat[arr[offset + 5]] +
       "-" +
-      转换密钥格式[arr[offset + 6]] +
-      转换密钥格式[arr[offset + 7]] +
+      hexFormat[arr[offset + 6]] +
+      hexFormat[arr[offset + 7]] +
       "-" +
-      转换密钥格式[arr[offset + 8]] +
-      转换密钥格式[arr[offset + 9]] +
+      hexFormat[arr[offset + 8]] +
+      hexFormat[arr[offset + 9]] +
       "-" +
-      转换密钥格式[arr[offset + 10]] +
-      转换密钥格式[arr[offset + 11]] +
-      转换密钥格式[arr[offset + 12]] +
-      转换密钥格式[arr[offset + 13]] +
-      转换密钥格式[arr[offset + 14]] +
-      转换密钥格式[arr[offset + 15]]
+      hexFormat[arr[offset + 10]] +
+      hexFormat[arr[offset + 11]] +
+      hexFormat[arr[offset + 12]] +
+      hexFormat[arr[offset + 13]] +
+      hexFormat[arr[offset + 14]] +
+      hexFormat[arr[offset + 15]]
     ).toLowerCase();
     return uuid;
   }
 
-  const 转换密钥格式 = [];
+  const hexFormat = [];
   for (let i = 0; i < 256; ++i) {
-    转换密钥格式.push((i + 256).toString(16).slice(1));
+    hexFormat.push((i + 256).toString(16).slice(1));
   }
 
-  async function 建立传输管道(写入初始数据) {
-    传输数据 = TCP接口.writable.getWriter();
-    if (写入初始数据) await 传输数据.write(写入初始数据);
-    TCP接口.readable.pipeTo(
+  async function establishTransmissionPipeline(initialData) {
+    writer = tcpSocket.writable.getWriter();
+    if (initialData) await writer.write(initialData);
+    tcpSocket.readable.pipeTo(
       new WritableStream({
-        async write(VL数据) {
-          WS接口.send(VL数据);
+        async write(vlessData) {
+          ws.send(vlessData);
         },
       })
     );
   }
 }
 
-// 其它工具函数
-function 转换IPv4到NAT64(ipv4地址) {
-  const 清理后的前缀 = NAT64前缀.replace(/\/\d+$/, '');
-  const 十六进制 = ipv4地址.split(".").map(段 => (+段).toString(16).padStart(2, "0"));
-  return `[${清理后的前缀}${十六进制[0]}${十六进制[1]}:${十六进制[2]}${十六进制[3]}]`;
+// Utility Functions
+function convertIPv4ToNAT64(ipv4Address) {
+  const cleanedPrefix = nat64Prefix.replace(/\/\d+$/, '');
+  const hex = ipv4Address.split(".").map(segment => (+segment).toString(16).padStart(2, "0"));
+  return `[${cleanedPrefix}${hex[0]}${hex[1]}:${hex[2]}${hex[3]}]`;
 }
 
-async function 解析域名到IPv4(域名) {
-  const { Answer } = await (await fetch(`https://${DOH地址}/dns-query?name=${域名}&type=A`, {
+async function resolveDomainToIPv4(domain) {
+  const { Answer } = await (await fetch(`https://${dohAddress}/dns-query?name=${domain}&type=A`, {
     headers: { "Accept": "application/dns-json" }
   })).json();
   return Answer.find(({ type }) => type === 1).data;
 }
 
-function 生成UUID() {
-  const 二十位 = Array.from(new TextEncoder().encode(订阅路径))
+function generateUUID() {
+  const twentyChars = Array.from(new TextEncoder().encode(subscriptionPath))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")
     .slice(0, 20)
     .padEnd(20, "0");
 
-  const 前八位 = 二十位
-    .slice(0, 8);
-  const 后十二位 = 二十位
-    .slice(-12);
+  const firstEight = twentyChars.slice(0, 8);
+  const lastTwelve = twentyChars.slice(-12);
 
-  return `${前八位}-0000-4000-8000-${后十二位}`;
+  return `${firstEight}-0000-4000-8000-${lastTwelve}`;
 }
 
-async function 获取优选列表() {
-  let 原始列表 = [];
-  if (优选链接) {
+async function fetchPreferredList() {
+  let rawList = [];
+  if (preferredLink) {
     try {
-      const 读取优选文本 = await fetch(优选链接);
-      const 转换优选文本 = await 读取优选文本.text();
-      原始列表 = 转换优选文本
+      const response = await fetch(preferredLink);
+      const text = await response.text();
+      rawList = text
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line);
 
-      if (原始列表.length > 0) {
-        return 原始列表;
+      if (rawList.length > 0) {
+        return rawList;
       }
     }
     catch {
@@ -325,21 +326,24 @@ async function 获取优选列表() {
   return [];
 }
 
-function 处理优选列表(优选列表, hostName) {
-  优选列表.unshift(`${hostName}#原生节点`);
-  return 优选列表.map((获取优选, index) => {
-    const [地址端口, 节点名字 = `节点 ${index + 1}`] = 获取优选.split("#");
-    const 拆分地址端口 = 地址端口.split(":");
-    const 端口 = 拆分地址端口.length > 1 ? Number(拆分地址端口.pop()) : 443;
-    const 地址 = 拆分地址端口.join(":");
-    return { 地址, 端口, 节点名字 };
+function processPreferredList(preferredList, hostName) {
+  // [NEW] Use custom SNI if configured, otherwise use hostname
+  const effectiveSNI = customSNI || hostName;
+  
+  preferredList.unshift(`${hostName}#native-node`);
+  return preferredList.map((entry, index) => {
+    const [addressPort, nodeName = `node-${index + 1}`] = entry.split("#");
+    const parts = addressPort.split(":");
+    const port = parts.length > 1 ? Number(parts.pop()) : 443;
+    const address = parts.join(":");
+    return { address, port, nodeName, sni: effectiveSNI };
   });
 }
 
-// 订阅页面
-async function 提示界面() {
-  const 提示界面 = `
-<title>订阅-${订阅路径}</title>
+// Subscription Pages
+async function generateTipsPage() {
+  const tipsPage = `
+<title>Subscription-${subscriptionPath}</title>
 <style>
   body {
     font-size: 25px;
@@ -355,109 +359,113 @@ async function 提示界面() {
     overflow: hidden;
   }
 </style>
-<strong>请把链接导入 ${科拉什} 或 ${威图锐}</strong>
+<strong>Please import the link into ${clash} or ${v2ray}</strong>
 `;
 
-  return new Response(提示界面, {
+  return new Response(tipsPage, {
     status: 200,
     headers: { "Content-Type": "text/html;charset=utf-8" },
   });
 }
 
-function 威图锐配置文件(hostName) {
-  const 节点列表 = 处理优选列表(优选列表, hostName);
-  const 配置内容 = 节点列表
-    .map(({ 地址, 端口, 节点名字 }) => {
-      return `${维列斯}://${验证UUID}@${地址}:${端口}?encryption=none&security=tls&sni=${hostName}&fp=chrome&type=ws&host=${hostName}#${节点名字}`;
+function generateV2rayConfig(hostName) {
+  const nodeList = processPreferredList(preferredList, hostName);
+  const configContent = nodeList
+    .map(({ address, port, nodeName, sni }) => {
+      // [NEW] Use custom SNI in the config if set
+      const effectiveSNI = sni || hostName;
+      return `${vless}://${validateUUID}@${address}:${port}?encryption=none&security=tls&sni=${effectiveSNI}&fp=chrome&type=ws&host=${hostName}#${nodeName}`;
     })
     .join("\n");
 
-  return new Response(配置内容);
+  return new Response(configContent);
 }
 
-function 科拉什配置文件(hostName) {
-  const 节点列表 = 处理优选列表(优选列表, hostName);
-  const 生成节点 = (节点列表) => {
-    return 节点列表.map(({ 地址, 端口, 节点名字 }) => {
+function generateClashConfig(hostName) {
+  const nodeList = processPreferredList(preferredList, hostName);
+  const generateNodes = (nodes) => {
+    return nodes.map(({ address, port, nodeName, sni }) => {
+      // [NEW] Use custom SNI in the config if set
+      const effectiveSNI = sni || hostName;
       return {
-        nodeConfig: `- name: ${节点名字}
-  type: ${维列斯}
-  server: ${地址}
-  port: ${端口}
-  uuid: ${验证UUID}
+        nodeConfig: `- name: ${nodeName}
+  type: ${vless}
+  server: ${address}
+  port: ${port}
+  uuid: ${validateUUID}
   udp: true
   tls: true
-  sni: ${hostName}
+  sni: ${effectiveSNI}
   network: ws
   ws-opts:
     headers:
       Host: ${hostName}
       User-Agent: Chrome`,
-        proxyConfig: `    - ${节点名字}`,
+        proxyConfig: `    - ${nodeName}`,
       };
     });
   };
 
-  const 节点配置 = 生成节点(节点列表)
+  const nodeConfigs = generateNodes(nodeList)
     .map((node) => node.nodeConfig)
     .join("\n");
-  const 代理配置 = 生成节点(节点列表)
+  const proxyConfigs = generateNodes(nodeList)
     .map((node) => node.proxyConfig)
     .join("\n");
 
-  const 配置内容 = `
+  const configContent = `
 proxies:
-${节点配置}
+${nodeConfigs}
 
 proxy-groups:
-- name: 海外规则
+- name: overseas-rules
   type: select
   proxies:
-    - 延迟优选
-    - 故障转移
+    - latency-preferred
+    - fallback
     - DIRECT
     - REJECT
-${代理配置}
-- name: 国内规则
+${proxyConfigs}
+- name: domestic-rules
   type: select
   proxies:
     - DIRECT
-    - 延迟优选
-    - 故障转移
+    - latency-preferred
+    - fallback
     - REJECT
-${代理配置}
-- name: 广告屏蔽
+${proxyConfigs}
+- name: ad-blocking
   type: select
   proxies:
     - REJECT
     - DIRECT
-    - 延迟优选
-    - 故障转移
-${代理配置}
-- name: 延迟优选
+    - latency-preferred
+    - fallback
+${proxyConfigs}
+- name: latency-preferred
   type: url-test
   url: https://www.google.com/generate_204
   interval: 30
   tolerance: 50
   proxies:
-${代理配置}
-- name: 故障转移
+${proxyConfigs}
+- name: fallback
   type: fallback
   url: https://www.google.com/generate_204
   interval: 30
   proxies:
-${代理配置}
+${proxyConfigs}
 
 rules:
-  - GEOSITE,category-ads-all,广告屏蔽
-  - GEOSITE,cn,国内规则
-  - GEOIP,CN,国内规则,no-resolve
-  - MATCH,海外规则
+  - GEOSITE,category-ads-all,ad-blocking
+  - GEOSITE,cn,domestic-rules
+  - GEOIP,CN,domestic-rules,no-resolve
+  - MATCH,overseas-rules
 `;
 
-  return new Response(配置内容);
+  return new Response(configContent);
 }
 
-function 聚合信息(hostName) {
-  return new Response(`${hostName}#${验证UUID}`);
+function generateAggregatedInfo(hostName) {
+  return new Response(`${hostName}#${validateUUID}`);
 }
